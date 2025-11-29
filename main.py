@@ -24,6 +24,9 @@ from ultralytics import YOLO
 import configparser
 import ast
 from sort.tracker import SortTracker
+from datetime import datetime
+import csv
+import os
 
 
 
@@ -85,6 +88,7 @@ boundLine = ast.literal_eval(config["ui"]["boundLine"])
 windowCropName = config["ui"]["windowCropName"]
 confidence = float(config["model"]["confidence"])
 direction = config["main"]["direction"].lower()  # left or right
+saveNoActivity = int(config["main"]["saveNoActivity"])  # seconds before saving to CSV
 
 boundLineRoi = [
   [roi[0][0] + boundLine[0], roi[0][1]],
@@ -94,6 +98,12 @@ boundLineRoi = [
 # Counting variables
 objectCount = 0
 trackedObjects = {}  # Store track_id: {"passed_first": bool, "passed_second": bool, "counted": bool, "center_x": int}
+
+# Time tracking variables
+startTime = time.time()
+lastActivityTime = time.time()
+sessionStartTime = datetime.now()
+sessionCount = 0
 
 if frameSkip > 0:
   fpsSet = fpsSet / (frameSkip + 1)
@@ -146,6 +156,26 @@ def mouseRectangle(event, x, y, flags, param):
 
 
 # update csv file ----------------------------------------------------------------------------------
+def updateCsvFile(startDateTime, endDateTime, count):
+  """Save session data to CSV file"""
+  csvFile = 'counting_log.csv'
+  fileExists = os.path.isfile(csvFile)
+  
+  with open(csvFile, 'a', newline='') as f:
+    writer = csv.writer(f)
+    
+    # Write header if file doesn't exist
+    if not fileExists:
+      writer.writerow(['Start Time', 'End Time', 'Total Count'])
+    
+    # Write data
+    writer.writerow([
+      startDateTime.strftime('%Y-%m-%d %H:%M:%S'),
+      endDateTime.strftime('%Y-%m-%d %H:%M:%S'),
+      count
+    ])
+  
+  print(f'CSV Updated: {count} objects counted from {startDateTime.strftime("%H:%M:%S")} to {endDateTime.strftime("%H:%M:%S")}')
 
 # ==================================================================================================
 # START & PROGRAM LOOP
@@ -185,6 +215,15 @@ while True:
   # Display object count
   cv.putText(frame, f"Count: {objectCount}", (10, 70), cv.FONT_HERSHEY_SIMPLEX, 
     FONT_SIZE, COLOR_GREEN, THICKNESS_BOLD)
+  
+  # Display running time
+  runningTime = int(time.time() - startTime)
+  hours = runningTime // 3600
+  minutes = (runningTime % 3600) // 60
+  seconds = runningTime % 60
+  timeStr = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+  cv.putText(frame, f"Time: {timeStr}", (10, 110), cv.FONT_HERSHEY_SIMPLEX, 
+    FONT_SIZE, COLOR_YELLOW, THICKNESS)
   
   # Display mouse position
   if drawRectangle:
@@ -274,6 +313,8 @@ while True:
         if trackedObjects[track_id]["passed_first"] and center_x >= second_line_x and not trackedObjects[track_id]["counted"]:
           trackedObjects[track_id]["counted"] = True
           objectCount += 1
+          sessionCount += 1
+          lastActivityTime = time.time()
       
       else:  # direction == "left"
         # Moving from right to left (second line > first line)
@@ -283,6 +324,8 @@ while True:
         if trackedObjects[track_id]["passed_first"] and center_x <= second_line_x and not trackedObjects[track_id]["counted"]:
           trackedObjects[track_id]["counted"] = True
           objectCount += 1
+          sessionCount += 1
+          lastActivityTime = time.time()
     
     # Update center position
     trackedObjects[track_id]["center_x"] = center_x
@@ -296,6 +339,17 @@ while True:
                0.5, color, THICKNESS_THIN)
     cv.circle(cropFrame, (center_x, center_y), 3, COLOR_RED, -1)
 
+  
+  # Check for no activity timeout
+  if sessionCount > 0 and (time.time() - lastActivityTime) >= saveNoActivity:
+    # Save to CSV
+    endDateTime = datetime.now()
+    updateCsvFile(sessionStartTime, endDateTime, sessionCount)
+    
+    # Reset session
+    sessionStartTime = datetime.now()
+    sessionCount = 0
+    lastActivityTime = time.time()
   
   # draw rectangle around ROI
   cv.rectangle(frame, roi[0], roi[1], COLOR_BLUE, THICKNESS)
