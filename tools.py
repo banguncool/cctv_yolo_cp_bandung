@@ -253,7 +253,7 @@ def getDistance(pt1, pt2):
 
 # get visible random color -------------------------------------------------------------------------
 def randomColor():
-  r = random.randint(150, 200)
-  g = random.randint(150, 200)
-  b = random.randint(150, 200)
+  r = random.randint(0, 255)
+  g = random.randint(0, 255)
+  b = random.randint(0, 255)
   return (b, g, r)

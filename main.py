@@ -21,9 +21,10 @@ import time
 import cv2 as cv
 import tools as tl
 from ultralytics import YOLO
-import random
 import configparser
 import ast
+from deep_sort_realtime.deepsort_tracker import DeepSort
+
 
 
 # ==================================================================================================
@@ -49,6 +50,8 @@ np.set_printoptions(suppress=True)
 config = configparser.ConfigParser(inline_comment_prefixes=(';',))
 config.read("config.ini")
 # print(cfg["model"]["weights"])
+
+tracker = DeepSort(max_age=5)
 
 resolutionWidth = 0
 resolutionHeight = 0
@@ -187,16 +190,11 @@ while True:
   # ================================================================================================
   # PROCESSING
   # ================================================================================================
-  cropFrame = tl.crop(frame, roi[0], roi[1]).copy()
+  cropFrame = tl.crop(frame, roi[0], roi[1])
 
-  # draw rectangle around ROI
-  cv.rectangle(frame, roi[0], roi[1], COLOR_BLUE, THICKNESS)
-
-  # draw boundary line 
-  cv.line(frame, (boundLineRoi[0][0], boundLineRoi[0][1]), (boundLineRoi[0][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
-  cv.line(frame, (boundLineRoi[1][0], boundLineRoi[0][1]), (boundLineRoi[1][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
-
-  results = model.track(cropFrame, conf=confidence, save=False, classes=0, verbose=False, persist=True)
+  
+  # results = model.track(cropFrame, conf=confidence, save=False, classes=0, verbose=False, persist=True)
+  results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
 
   for box in results[0].boxes:  # xyxy format: [x_min, y_min, x_max, y_max, confidence, class]
     x_min, y_min, x_max, y_max = box.xyxy[0]  # Extract bounding box coordinates
@@ -208,10 +206,17 @@ while True:
     conf = box.conf[0]  # Confidence score
     cls = int(box.cls[0])  # Class ID
     
-    cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), tl.randomColor(), THICKNESS) 
-    cv.imshow(windowCropName, tl.resize(cropFrame, viewScale))
+    cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), COLOR_GREEN, THICKNESS) 
+    # cv.imshow(windowCropName, tl.resize(cropFrame, viewScale))
 
   
+  # draw rectangle around ROI
+  cv.rectangle(frame, roi[0], roi[1], COLOR_BLUE, THICKNESS)
+
+  # draw boundary line 
+  cv.line(frame, (boundLineRoi[0][0], boundLineRoi[0][1]), (boundLineRoi[0][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
+  cv.line(frame, (boundLineRoi[1][0], boundLineRoi[0][1]), (boundLineRoi[1][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
+
   # Show frame
   cv.imshow(windowName, tl.resize(frame, viewScale))
   # ================================================================================================
