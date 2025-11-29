@@ -56,18 +56,14 @@ model = YOLO(config["model"]["weights"])
 cap = cv.VideoCapture(config["main"]["vidInput"])
 
 # Get video resolution
-RESOLUTION_WIDTH = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
-RESOLUTION_HEIGHT = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+resolutionWidth = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+resolutionHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
 
-# ==================================================================================================
-# DEFINITION
-# ==================================================================================================
+# Mouse callback variables
+textMousePosition = '(0, 0)'
+measurePoint = [[0, 0], [0, 0]]
+measureEvent = 0
 
-
-
-# ==================================================================================================
-# PROGRAM LOOP
-# ==================================================================================================
 frameCount = 0
 fpsStartTime = time.time()
 fps = 0
@@ -77,10 +73,64 @@ fpsUpdateTime = time.time()
 fpsSet = int(config["main"]["fpsSet"])
 frameSkip = int(config["main"]["frameSkip"])
 viewScale = float(config["ui"]["viewScale"])
+windowName = config["main"]["windowName"]
+
+
+# ==================================================================================================
+# DEFINITION
+# ==================================================================================================
+# Mouse callback function for rectangle drawing
+def mouseRectangle(event, x, y, flags, param):
+  global measurePoint
+  global measureEvent
+  global viewScale
+  global textMousePosition
+  
+  scale = 1 / viewScale
+  if event == cv.EVENT_MOUSEMOVE:
+    textMousePosition = f'({int(x*scale)}, {int(y*scale)})'
+  else:
+    textMousePosition = ''
+
+  # Point 1 - first click sets the first corner
+  if measureEvent == 0:
+    if event == cv.EVENT_LBUTTONDOWN:
+      measurePoint[0][0] = int(x / viewScale)
+      measurePoint[0][1] = int(y / viewScale)
+      measurePoint[1][0] = int(x / viewScale)
+      measurePoint[1][1] = int(y / viewScale)
+
+  # Point 2 - mouse move updates the second corner
+  if measureEvent == 1:
+    if event == cv.EVENT_MOUSEMOVE:
+      measurePoint[1][0] = int(x / viewScale)
+      measurePoint[1][1] = int(y / viewScale)
+
+  # Handle clicks
+  if event == cv.EVENT_LBUTTONDOWN:
+    if measureEvent == 1:
+      # Print the two points to console
+      print(measurePoint)
+
+    measureEvent += 1 
+    if measureEvent > 2:
+      measureEvent = 0
+      measurePoint = [[0, 0], [0, 0]]
+
+
+
+# ==================================================================================================
+# PROGRAM LOOP
+# ==================================================================================================
+
 
 # Calculate target frame time
 targetFrameTime = 1.0 / fpsSet if fpsSet > 0 else 0
 nextFrameTime = time.time()
+
+# Set up mouse callback
+cv.namedWindow(windowName)
+cv.setMouseCallback(windowName, mouseRectangle)
 
 while True:
   # Read frame
@@ -109,6 +159,17 @@ while True:
   # Display FPS
   cv.putText(frame, f"FPS: {fpsDisplay:.1f}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 
     FONT_SIZE, COLOR_YELLOW, THICKNESS)
+  
+  # Display mouse position
+  cv.putText(frame, textMousePosition, (resolutionWidth - 150, 30), cv.FONT_HERSHEY_SIMPLEX, 
+    FONT_SIZE, COLOR_YELLOW, THICKNESS)
+  
+  # Draw rectangle if measuring
+  if measureEvent != 0:
+    ms = measurePoint
+    cv.putText(frame, f'M: {measureEvent}: ({ms[0][0]}, {ms[0][1]}) ({ms[1][0]}, {ms[1][1]})', 
+        (resolutionWidth - 380, 70), cv.FONT_HERSHEY_SIMPLEX, FONT_SIZE, COLOR_YELLOW, THICKNESS)
+    cv.rectangle(frame, measurePoint[0], measurePoint[1], COLOR_GREEN, THICKNESS)
   
   # ================================================================================================
   # PROCESSING
