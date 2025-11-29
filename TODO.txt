@@ -1,0 +1,10 @@
+TODO List
+
+- Git init
+- Create file record from CCTV save to folder (ignore from git)
+- Initializing main.py to read data from cctv and mp4 in configuration settings
+- Create simple basic Yolo detect and DeepSORT with simple frame
+- Create logic from left to right and opposite direction
+- Create label to show count
+- Create logic if there is no object count then create new production
+- Create file result of production session such as: Time start, time end, count in csv format 
