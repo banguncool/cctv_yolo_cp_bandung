@@ -23,7 +23,7 @@ import tools as tl
 from ultralytics import YOLO
 import configparser
 import ast
-from deep_sort_realtime.deepsort_tracker import DeepSort
+from sort.tracker import SortTracker
 
 
 
@@ -51,7 +51,7 @@ config = configparser.ConfigParser(inline_comment_prefixes=(';',))
 config.read("config.ini")
 # print(cfg["model"]["weights"])
 
-tracker = DeepSort(max_age=5)
+tracker = SortTracker(max_age=5, min_hits=3, iou_threshold=0.3)
 
 resolutionWidth = 0
 resolutionHeight = 0
@@ -84,11 +84,16 @@ roi = ast.literal_eval(config["ui"]["roi"])
 boundLine = ast.literal_eval(config["ui"]["boundLine"])
 windowCropName = config["ui"]["windowCropName"]
 confidence = float(config["model"]["confidence"])
+direction = config["main"]["direction"].lower()  # left or right
 
 boundLineRoi = [
   [roi[0][0] + boundLine[0], roi[0][1]],
   [roi[0][0] + boundLine[1], roi[1][1]]
 ]
+
+# Counting variables
+objectCount = 0
+trackedObjects = {}  # Store track_id: {"passed_first": bool, "passed_second": bool, "counted": bool, "center_x": int}
 
 if frameSkip > 0:
   fpsSet = fpsSet / (frameSkip + 1)
@@ -175,6 +180,10 @@ while True:
   cv.putText(frame, f"FPS: {fpsDisplay:.1f}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 
     FONT_SIZE, COLOR_YELLOW, THICKNESS)
   
+  # Display object count
+  cv.putText(frame, f"Count: {objectCount}", (10, 70), cv.FONT_HERSHEY_SIMPLEX, 
+    FONT_SIZE, COLOR_GREEN, THICKNESS_BOLD)
+  
   # Display mouse position
   if drawRectangle:
     cv.putText(frame, textMousePosition, (resolutionWidth - 150, 30), cv.FONT_HERSHEY_SIMPLEX, 
@@ -192,22 +201,79 @@ while True:
   # ================================================================================================
   cropFrame = tl.crop(frame, roi[0], roi[1])
 
-  
-  # results = model.track(cropFrame, conf=confidence, save=False, classes=0, verbose=False, persist=True)
+  # Use model.predict instead of model.track
   results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
 
-  for box in results[0].boxes:  # xyxy format: [x_min, y_min, x_max, y_max, confidence, class]
-    x_min, y_min, x_max, y_max = box.xyxy[0]  # Extract bounding box coordinates
-
-    # Convert coordinates to integers for OpenCV
-    x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
-
-    # trackId = int(box.id[0])  # Unique tracking ID for each object
-    conf = box.conf[0]  # Confidence score
-    cls = int(box.cls[0])  # Class ID
+  # Prepare detections for sort-track
+  detections = []
+  for box in results[0].boxes:
+    x_min, y_min, x_max, y_max = box.xyxy[0]
+    conf = box.conf[0]
+    cls = int(box.cls[0])
     
-    cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), COLOR_GREEN, THICKNESS) 
-    # cv.imshow(windowCropName, tl.resize(cropFrame, viewScale))
+    # Convert to integers
+    x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
+    
+    # Format: [x_min, y_min, x_max, y_max, confidence, class_id]
+    detections.append([x_min, y_min, x_max, y_max, float(conf), cls])
+  
+  # Update tracker with detections (SortTracker expects detections and frame)
+  if len(detections) > 0:
+    tracks = tracker.update(np.array(detections), cropFrame)
+  else:
+    tracks = np.array([])
+  
+  # Process tracked objects
+  for track in tracks:
+    x_min, y_min, x_max, y_max, track_id = int(track[0]), int(track[1]), int(track[2]), int(track[3]), int(track[4])
+    
+    # Calculate center point of bounding box
+    center_x = (x_min + x_max) // 2
+    center_y = (y_min + y_max) // 2
+    
+    # Initialize tracking data for new objects
+    if track_id not in trackedObjects:
+      trackedObjects[track_id] = {
+        "passed_first": False,
+        "passed_second": False,
+        "counted": False,
+        "center_x": center_x
+      }
+    
+    # Get absolute x positions of boundary lines in crop coordinates
+    first_line_x = boundLine[0]
+    second_line_x = boundLine[1]
+    
+    # Check boundary crossing based on direction
+    if direction == "right":
+      # Moving from left to right (first line < second line)
+      if center_x >= first_line_x and not trackedObjects[track_id]["passed_first"]:
+        trackedObjects[track_id]["passed_first"] = True
+      
+      if trackedObjects[track_id]["passed_first"] and center_x >= second_line_x and not trackedObjects[track_id]["counted"]:
+        trackedObjects[track_id]["counted"] = True
+        objectCount += 1
+    
+    else:  # direction == "left"
+      # Moving from right to left (second line > first line)
+      if center_x <= second_line_x and not trackedObjects[track_id]["passed_first"]:
+        trackedObjects[track_id]["passed_first"] = True
+      
+      if trackedObjects[track_id]["passed_first"] and center_x <= first_line_x and not trackedObjects[track_id]["counted"]:
+        trackedObjects[track_id]["counted"] = True
+        objectCount += 1
+    
+    # Update center position
+    trackedObjects[track_id]["center_x"] = center_x
+    
+    # Draw bounding box
+    color = COLOR_RED if trackedObjects[track_id]["counted"] else COLOR_GREEN
+    cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), color, THICKNESS)
+    
+    # Draw track ID and center point
+    cv.putText(cropFrame, f"ID:{track_id}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
+               0.5, color, THICKNESS_THIN)
+    cv.circle(cropFrame, (center_x, center_y), 3, COLOR_RED, -1)
 
   
   # draw rectangle around ROI
