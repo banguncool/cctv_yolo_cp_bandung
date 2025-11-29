@@ -23,6 +23,7 @@ import tools as tl
 from ultralytics import YOLO
 import random
 import configparser
+import ast
 
 
 # ==================================================================================================
@@ -70,10 +71,28 @@ fps = 0
 fpsDisplay = 0
 fpsFrameCount = 0
 fpsUpdateTime = time.time()
-fpsSet = int(config["main"]["fpsSet"])
-frameSkip = int(config["main"]["frameSkip"])
+fpsSet = int(config["ui"]["fpsSet"])
+frameSkip = int(config["ui"]["frameSkip"])
 viewScale = float(config["ui"]["viewScale"])
-windowName = config["main"]["windowName"]
+windowName = config["ui"]["windowName"]
+drawRectangle = config.getboolean("main", "drawRectangle")
+roi = ast.literal_eval(config["ui"]["roi"])
+boundLine = ast.literal_eval(config["ui"]["boundLine"])
+windowCropName = config["ui"]["windowCropName"]
+
+boundLineRoi = [
+  [
+    roi[0][0] + boundLine[0],
+    roi[0][1]
+  ],
+  [
+    roi[0][0] + boundLine[1],
+    roi[1][1]
+  ]
+]
+
+if frameSkip > 0:
+  fpsSet = fpsSet / (frameSkip + 1)
 
 
 # ==================================================================================================
@@ -161,20 +180,31 @@ while True:
     FONT_SIZE, COLOR_YELLOW, THICKNESS)
   
   # Display mouse position
-  cv.putText(frame, textMousePosition, (resolutionWidth - 150, 30), cv.FONT_HERSHEY_SIMPLEX, 
-    FONT_SIZE, COLOR_YELLOW, THICKNESS)
-  
-  # Draw rectangle if measuring
-  if measureEvent != 0:
-    ms = measurePoint
-    cv.putText(frame, f'M: {measureEvent}: ({ms[0][0]}, {ms[0][1]}) ({ms[1][0]}, {ms[1][1]})', 
-        (resolutionWidth - 380, 70), cv.FONT_HERSHEY_SIMPLEX, FONT_SIZE, COLOR_YELLOW, THICKNESS)
-    cv.rectangle(frame, measurePoint[0], measurePoint[1], COLOR_GREEN, THICKNESS)
+  if drawRectangle:
+    cv.putText(frame, textMousePosition, (resolutionWidth - 150, 30), cv.FONT_HERSHEY_SIMPLEX, 
+      FONT_SIZE, COLOR_YELLOW, THICKNESS)
+    
+    # Draw rectangle if measuring
+    if measureEvent != 0:
+      ms = measurePoint
+      cv.putText(frame, f'M: {measureEvent}: ({ms[0][0]}, {ms[0][1]}) ({ms[1][0]}, {ms[1][1]})', 
+          (resolutionWidth - 380, 70), cv.FONT_HERSHEY_SIMPLEX, FONT_SIZE, COLOR_YELLOW, THICKNESS)
+      cv.rectangle(frame, measurePoint[0], measurePoint[1], COLOR_GREEN, THICKNESS)
   
   # ================================================================================================
   # PROCESSING
   # ================================================================================================
+  crop = tl.crop(frame, roi[0], roi[1])
 
+  cv.imshow(windowCropName, tl.resize(crop, viewScale))
+  # draw rectangle around ROI
+
+
+
+  cv.rectangle(frame, roi[0], roi[1], COLOR_BLUE, THICKNESS)
+  # draw boundary line 
+  cv.line(frame, (boundLineRoi[0][0], boundLineRoi[0][1]), (boundLineRoi[0][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
+  cv.line(frame, (boundLineRoi[1][0], boundLineRoi[0][1]), (boundLineRoi[1][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
 
 
   
