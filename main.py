@@ -145,6 +145,8 @@ def mouseRectangle(event, x, y, flags, param):
       measurePoint = [[0, 0], [0, 0]]
 
 
+# update csv file ----------------------------------------------------------------------------------
+
 # ==================================================================================================
 # START & PROGRAM LOOP
 # ==================================================================================================
@@ -231,43 +233,62 @@ while True:
     center_x = (x_min + x_max) // 2
     center_y = (y_min + y_max) // 2
     
+    # Get absolute x positions of boundary lines in crop coordinates
+    first_line_x = boundLine[0]
+    second_line_x = boundLine[1]
+    
     # Initialize tracking data for new objects
     if track_id not in trackedObjects:
+      # Determine initial state based on where object first appears
+      before_first = False
+      between_lines = False
+      after_second = False
+      
+      if direction == "right":
+        # For right direction: first_line is on left, second_line is on right
+        before_first = center_x < first_line_x
+        between_lines = first_line_x <= center_x < second_line_x
+        after_second = center_x >= second_line_x
+      else:  # direction == "left"
+        # For left direction: second_line is on left, first_line is on right
+        before_first = center_x > first_line_x
+        between_lines = second_line_x < center_x <= first_line_x
+        after_second = center_x <= second_line_x
+      
       trackedObjects[track_id] = {
+        "before_first": before_first,
         "passed_first": False,
         "passed_second": False,
         "counted": False,
         "center_x": center_x
       }
     
-    # Get absolute x positions of boundary lines in crop coordinates
-    first_line_x = boundLine[0]
-    second_line_x = boundLine[1]
-    
-    # Check boundary crossing based on direction
-    if direction == "right":
-      # Moving from left to right (first line < second line)
-      if center_x >= first_line_x and not trackedObjects[track_id]["passed_first"]:
-        trackedObjects[track_id]["passed_first"] = True
+    # Only process if object started before first line
+    if trackedObjects[track_id]["before_first"]:
+      # Check boundary crossing based on direction
+      if direction == "right":
+        # Moving from left to right (first line < second line)
+        if center_x >= first_line_x and not trackedObjects[track_id]["passed_first"]:
+          trackedObjects[track_id]["passed_first"] = True
+        
+        if trackedObjects[track_id]["passed_first"] and center_x >= second_line_x and not trackedObjects[track_id]["counted"]:
+          trackedObjects[track_id]["counted"] = True
+          objectCount += 1
       
-      if trackedObjects[track_id]["passed_first"] and center_x >= second_line_x and not trackedObjects[track_id]["counted"]:
-        trackedObjects[track_id]["counted"] = True
-        objectCount += 1
-    
-    else:  # direction == "left"
-      # Moving from right to left (second line > first line)
-      if center_x <= second_line_x and not trackedObjects[track_id]["passed_first"]:
-        trackedObjects[track_id]["passed_first"] = True
-      
-      if trackedObjects[track_id]["passed_first"] and center_x <= first_line_x and not trackedObjects[track_id]["counted"]:
-        trackedObjects[track_id]["counted"] = True
-        objectCount += 1
+      else:  # direction == "left"
+        # Moving from right to left (second line > first line)
+        if center_x <= first_line_x and not trackedObjects[track_id]["passed_first"]:
+          trackedObjects[track_id]["passed_first"] = True
+        
+        if trackedObjects[track_id]["passed_first"] and center_x <= second_line_x and not trackedObjects[track_id]["counted"]:
+          trackedObjects[track_id]["counted"] = True
+          objectCount += 1
     
     # Update center position
     trackedObjects[track_id]["center_x"] = center_x
     
     # Draw bounding box
-    color = COLOR_RED if trackedObjects[track_id]["counted"] else COLOR_GREEN
+    color = COLOR_PINK if trackedObjects[track_id]["counted"] else COLOR_GREEN
     cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), color, THICKNESS)
     
     # Draw track ID and center point
