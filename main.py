@@ -71,6 +71,7 @@ fps = 0
 fpsDisplay = 0
 fpsFrameCount = 0
 fpsUpdateTime = time.time()
+
 fpsSet = int(config["ui"]["fpsSet"])
 frameSkip = int(config["ui"]["frameSkip"])
 viewScale = float(config["ui"]["viewScale"])
@@ -79,20 +80,19 @@ drawRectangle = config.getboolean("main", "drawRectangle")
 roi = ast.literal_eval(config["ui"]["roi"])
 boundLine = ast.literal_eval(config["ui"]["boundLine"])
 windowCropName = config["ui"]["windowCropName"]
+confidence = float(config["model"]["confidence"])
 
 boundLineRoi = [
-  [
-    roi[0][0] + boundLine[0],
-    roi[0][1]
-  ],
-  [
-    roi[0][0] + boundLine[1],
-    roi[1][1]
-  ]
+  [roi[0][0] + boundLine[0], roi[0][1]],
+  [roi[0][0] + boundLine[1], roi[1][1]]
 ]
 
 if frameSkip > 0:
   fpsSet = fpsSet / (frameSkip + 1)
+
+# Calculate target frame time
+targetFrameTime = 1.0 / fpsSet if fpsSet > 0 else 0
+nextFrameTime = time.time()
 
 
 # ==================================================================================================
@@ -137,16 +137,9 @@ def mouseRectangle(event, x, y, flags, param):
       measurePoint = [[0, 0], [0, 0]]
 
 
-
 # ==================================================================================================
-# PROGRAM LOOP
+# START & PROGRAM LOOP
 # ==================================================================================================
-
-
-# Calculate target frame time
-targetFrameTime = 1.0 / fpsSet if fpsSet > 0 else 0
-nextFrameTime = time.time()
-
 # Set up mouse callback
 cv.namedWindow(windowName)
 cv.setMouseCallback(windowName, mouseRectangle)
@@ -194,22 +187,33 @@ while True:
   # ================================================================================================
   # PROCESSING
   # ================================================================================================
-  crop = tl.crop(frame, roi[0], roi[1])
+  cropFrame = tl.crop(frame, roi[0], roi[1]).copy()
 
-  cv.imshow(windowCropName, tl.resize(crop, viewScale))
   # draw rectangle around ROI
-
-
-
   cv.rectangle(frame, roi[0], roi[1], COLOR_BLUE, THICKNESS)
+
   # draw boundary line 
   cv.line(frame, (boundLineRoi[0][0], boundLineRoi[0][1]), (boundLineRoi[0][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
   cv.line(frame, (boundLineRoi[1][0], boundLineRoi[0][1]), (boundLineRoi[1][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
 
+  results = model.track(cropFrame, conf=confidence, save=False, classes=0, verbose=False, persist=True)
+
+  for box in results[0].boxes:  # xyxy format: [x_min, y_min, x_max, y_max, confidence, class]
+    x_min, y_min, x_max, y_max = box.xyxy[0]  # Extract bounding box coordinates
+
+    # Convert coordinates to integers for OpenCV
+    x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
+
+    # trackId = int(box.id[0])  # Unique tracking ID for each object
+    conf = box.conf[0]  # Confidence score
+    cls = int(box.cls[0])  # Class ID
+    
+    cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), tl.randomColor(), THICKNESS) 
+    cv.imshow(windowCropName, tl.resize(cropFrame, viewScale))
 
   
   # Show frame
-  cv.imshow("CCTV YOLO Detection", tl.resize(frame, viewScale))
+  cv.imshow(windowName, tl.resize(frame, viewScale))
   # ================================================================================================
   # END OF PROCESSING
   # ================================================================================================
