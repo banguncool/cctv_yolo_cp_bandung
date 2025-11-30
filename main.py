@@ -62,10 +62,6 @@ resolutionHeight = 0
 model = YOLO(config["model"]["weights"])
 cap = cv.VideoCapture(config["main"]["vidInput"])
 
-# Get video resolution
-resolutionWidth = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
-resolutionHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-
 # Mouse callback variables
 textMousePosition = '(0, 0)'
 measurePoint = [[0, 0], [0, 0]]
@@ -83,16 +79,30 @@ frameSkip = int(config["ui"]["frameSkip"])
 viewScale = float(config["ui"]["viewScale"])
 windowName = config["ui"]["windowName"]
 drawRectangle = config.getboolean("main", "drawRectangle")
-roi = ast.literal_eval(config["ui"]["roi"])
+fov = ast.literal_eval(config["ui"]["fov"])
 boundLine = ast.literal_eval(config["ui"]["boundLine"])
 windowCropName = config["ui"]["windowCropName"]
 confidence = float(config["model"]["confidence"])
 direction = config["main"]["direction"].lower()  # left or right
 saveNoActivity = int(config["main"]["saveNoActivity"])  # seconds before saving to CSV
+encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
+crop = config.getboolean("main", "crop")
+cropArea = ast.literal_eval(config["main"]["cropArea"])
 
-boundLineRoi = [
-  [roi[0][0] + boundLine[0], roi[0][1]],
-  [roi[0][0] + boundLine[1], roi[1][1]]
+# Set video backend options to handle corrupted frames
+cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*encode))
+cap.set(cv.CAP_PROP_BUFFERSIZE, 3)
+
+# Get video resolution
+resolutionWidth = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+resolutionHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+if crop:
+  resolutionWidth = cropArea[1][0] - cropArea[0][0]
+  resolutionHeight = cropArea[1][1] - cropArea[0][1]
+
+boundLineFov = [
+  [fov[0][0] + boundLine[0], fov[0][1]],
+  [fov[0][0] + boundLine[1], fov[1][1]]
 ]
 
 # Counting variables
@@ -189,6 +199,13 @@ while True:
   ret, frame = cap.read()
   if not ret:
     break
+
+  if crop:
+    frame = tl.crop(frame, cropArea[0], cropArea[1])
+  
+  # Skip corrupted frames
+  if frame is None or frame.size == 0:
+    continue
   
   # Frame skipping
   frameCount += 1
@@ -240,7 +257,7 @@ while True:
   # ================================================================================================
   # PROCESSING
   # ================================================================================================
-  cropFrame = tl.crop(frame, roi[0], roi[1])
+  cropFrame = tl.crop(frame, fov[0], fov[1])
 
   # Use model.predict instead of model.track
   results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
@@ -351,12 +368,12 @@ while True:
     sessionCount = 0
     lastActivityTime = time.time()
   
-  # draw rectangle around ROI
-  cv.rectangle(frame, roi[0], roi[1], COLOR_BLUE, THICKNESS)
+  # draw rectangle around FOV
+  cv.rectangle(frame, fov[0], fov[1], COLOR_BLUE, THICKNESS)
 
   # draw boundary line 
-  cv.line(frame, (boundLineRoi[0][0], boundLineRoi[0][1]), (boundLineRoi[0][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
-  cv.line(frame, (boundLineRoi[1][0], boundLineRoi[0][1]), (boundLineRoi[1][0], boundLineRoi[1][1]), COLOR_RED, THICKNESS_THIN)
+  cv.line(frame, (boundLineFov[0][0], boundLineFov[0][1]), (boundLineFov[0][0], boundLineFov[1][1]), COLOR_RED, THICKNESS_THIN)
+  cv.line(frame, (boundLineFov[1][0], boundLineFov[0][1]), (boundLineFov[1][0], boundLineFov[1][1]), COLOR_RED, THICKNESS_THIN)
 
   # Show frame
   cv.imshow(windowName, tl.resize(frame, viewScale))
