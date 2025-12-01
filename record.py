@@ -16,6 +16,7 @@ from datetime import datetime
 import time
 import tools as tl
 
+RECORD = False  # Start in view mode by default
 
 # ==================================================================================================
 # CONSTANTS
@@ -64,7 +65,11 @@ def getCurrentTime():
 # MAIN PROGRAM
 # ==================================================================================================
 def main():
-    print("Starting CCTV Recording...")
+    global RECORD
+    isRecording = RECORD
+    
+    mode = "Recording" if isRecording else "Viewing"
+    print(f"Starting CCTV {mode}...")
     print(f"RTSP URL: {rtspUrl}")
     print(f"Crop enabled: {crop}")
     if crop:
@@ -72,17 +77,6 @@ def main():
     
     # Open CCTV stream
     cap = cv.VideoCapture(rtspUrl)
-    
-    # Set video backend options - use more compatible codecs for Windows
-    if encode == "h264":
-        fourcc = cv.VideoWriter_fourcc(*'avc1')  # H264 - more compatible on Windows
-    elif encode == "h265":
-        fourcc = cv.VideoWriter_fourcc(*'mp4v')  # Fallback to mp4v for compatibility
-        print("Warning: H265 not fully supported, using mp4v codec instead")
-    elif encode == "mjpeg":
-        fourcc = cv.VideoWriter_fourcc(*'MJPG')
-    else:
-        fourcc = cv.VideoWriter_fourcc(*'mp4v')
     
     cap.set(cv.CAP_PROP_BUFFERSIZE, 3)
     
@@ -106,34 +100,60 @@ def main():
         height = cropArea[1][1] - cropArea[0][1]
         print(f"Output dimensions (cropped): {width}x{height}")
     
-    # Create VideoWriter with fallback options
-    fileName = getFileName()
-    outputPath = os.path.join(videoFolder, fileName)
+    # Initialize VideoWriter
+    out = None
+    outputPath = None
     
-    # Try primary codec
-    out = cv.VideoWriter(outputPath, fourcc, fps, (width, height))
-    
-    # If failed, try fallback codecs
-    if not out.isOpened():
-        print(f"Warning: Primary codec failed, trying mp4v fallback...")
-        fourcc = cv.VideoWriter_fourcc(*'mp4v')
+    def initializeRecorder():
+        """Initialize video writer for recording"""
+        nonlocal out, outputPath
+        
+        # Set video backend options - use more compatible codecs for Windows
+        if encode == "h264":
+            fourcc = cv.VideoWriter_fourcc(*'avc1')  # H264 - more compatible on Windows
+        elif encode == "h265":
+            fourcc = cv.VideoWriter_fourcc(*'mp4v')  # Fallback to mp4v for compatibility
+            print("Warning: H265 not fully supported, using mp4v codec instead")
+        elif encode == "mjpeg":
+            fourcc = cv.VideoWriter_fourcc(*'MJPG')
+        else:
+            fourcc = cv.VideoWriter_fourcc(*'mp4v')
+        
+        # Create VideoWriter with fallback options
+        fileName = getFileName()
+        outputPath = os.path.join(videoFolder, fileName)
+        
+        # Try primary codec
         out = cv.VideoWriter(outputPath, fourcc, fps, (width, height))
+        
+        # If failed, try fallback codecs
+        if not out.isOpened():
+            print(f"Warning: Primary codec failed, trying mp4v fallback...")
+            fourcc = cv.VideoWriter_fourcc(*'mp4v')
+            out = cv.VideoWriter(outputPath, fourcc, fps, (width, height))
+        
+        if not out.isOpened():
+            print(f"Warning: mp4v failed, trying XVID fallback...")
+            fourcc = cv.VideoWriter_fourcc(*'XVID')
+            outputPath = outputPath.replace('.mp4', '.avi')
+            out = cv.VideoWriter(outputPath, fourcc, fps, (width, height))
+        
+        if not out.isOpened():
+            print("Error: Cannot create video writer with any codec")
+            return False
+        
+        print(f"Recording started: {outputPath}")
+        return True
     
-    if not out.isOpened():
-        print(f"Warning: mp4v failed, trying XVID fallback...")
-        fourcc = cv.VideoWriter_fourcc(*'XVID')
-        outputPath = outputPath.replace('.mp4', '.avi')
-        out = cv.VideoWriter(outputPath, fourcc, fps, (width, height))
+    # Initialize recorder if starting in record mode
+    if isRecording:
+        if not initializeRecorder():
+            cap.release()
+            return
     
-    if not out.isOpened():
-        print("Error: Cannot create video writer with any codec")
-        cap.release()
-        return
+    print("Press 'R' to start recording, 'V' for view mode, ESC to stop")
     
-    print(f"Recording to: {outputPath}")
-    print("Press ESC to stop recording")
-    
-    windowName = "CCTV Recording"
+    windowName = "CCTV Recording" if RECORD else "CCTV View"
     cv.namedWindow(windowName)
     
     frameCount = 0
@@ -162,44 +182,68 @@ def main():
         if frameCropped.shape[1] != width or frameCropped.shape[0] != height:
             frameCropped = cv.resize(frameCropped, (width, height))
         
-        # Write cropped frame to video file
-        out.write(frameCropped)
+        # Write cropped frame to video file only if recording is active
+        if isRecording and out is not None:
+            out.write(frameCropped)
         
-        # Create display frame (with running time overlay, but not saved to video)
+        # Create display frame (with running time overlay)
         displayFrame = frameCropped.copy()
         elapsed = time.time() - startTime
         hours = int(elapsed // 3600)
         minutes = int((elapsed % 3600) // 60)
         seconds = int(elapsed % 60)
         runningTime = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        cv.putText(displayFrame, runningTime, (10, 30), cv.FONT_HERSHEY_SIMPLEX, 
+        statusText = f"REC {runningTime}" if isRecording else f"VIEW {runningTime}"
+        cv.putText(displayFrame, statusText, (10, 30), cv.FONT_HERSHEY_SIMPLEX, 
                    FONT_SIZE, COLOR_YELLOW, THICKNESS)
         
         # Show frame with time overlay
         cv.imshow(windowName, displayFrame)
         
-        # Display recording stats every 100 frames
+        # Display stats every 100 frames
         if frameCount % 100 == 0:
             elapsed = time.time() - startTime
             actualFps = frameCount / elapsed if elapsed > 0 else 0
-            print(f"Recorded {frameCount} frames | FPS: {actualFps:.1f}")
+            if isRecording:
+                print(f"Recorded {frameCount} frames | FPS: {actualFps:.1f}")
+            else:
+                print(f"Viewed {frameCount} frames | FPS: {actualFps:.1f}")
         
-        # Check for ESC key to stop recording
+        # Check for keyboard input
         key = cv.waitKey(1) & 0xFF
+        
         if key == 27:  # ESC key
-            print("\nStopping recording...")
+            mode = "Recording" if isRecording else "Viewing"
+            print(f"\nStopping {mode.lower()}...")
             break
+        elif key == ord('r') or key == ord('R'):  # R key - start recording
+            if not isRecording:
+                if initializeRecorder():
+                    isRecording = True
+                    print("Switched to RECORDING mode")
+        elif key == ord('v') or key == ord('V'):  # V key - view mode
+            if isRecording:
+                if out is not None:
+                    out.release()
+                    print(f"Recording saved: {outputPath}")
+                    out = None
+                    outputPath = None
+                isRecording = False
+                print("Switched to VIEW mode")
     
     # Cleanup
     elapsed = time.time() - startTime
-    print(f"\nRecording finished:")
+    mode = "Recording" if isRecording else "Viewing"
+    print(f"\n{mode} finished:")
     print(f"Total frames: {frameCount}")
     print(f"Duration: {elapsed:.1f} seconds")
     print(f"Average FPS: {frameCount/elapsed:.1f}")
-    print(f"Saved to: {outputPath}")
+    if isRecording and outputPath:
+        print(f"Saved to: {outputPath}")
     
     cap.release()
-    out.release()
+    if out is not None:
+        out.release()
     cv.destroyAllWindows()
 
 
