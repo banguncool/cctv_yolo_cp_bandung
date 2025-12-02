@@ -54,7 +54,7 @@ config = configparser.ConfigParser(inline_comment_prefixes=(';',))
 config.read("config.ini")
 # print(cfg["model"]["weights"])
 
-tracker = SortTracker(max_age=5, min_hits=3, iou_threshold=0.3)
+
 
 resolutionWidth = 0
 resolutionHeight = 0
@@ -88,6 +88,10 @@ saveNoActivity = int(config["main"]["saveNoActivity"])  # seconds before saving 
 encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
 crop = config.getboolean("main", "crop")
 cropArea = ast.literal_eval(config["main"]["cropArea"])
+maxAgeTracker = int(config["main"]["maxAgeTracker"])
+
+
+tracker = SortTracker(max_age=maxAgeTracker, min_hits=3, iou_threshold=0.3)
 
 # Set video backend options to handle corrupted frames
 cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*encode))

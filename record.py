@@ -220,6 +220,8 @@ def main():
             if not isRecording:
                 if initializeRecorder():
                     isRecording = True
+                    startTime = time.time()  # Reset timer
+                    frameCount = 0  # Reset frame count
                     print("Switched to RECORDING mode")
         elif key == ord('v') or key == ord('V'):  # V key - view mode
             if isRecording:
@@ -229,6 +231,8 @@ def main():
                     out = None
                     outputPath = None
                 isRecording = False
+                startTime = time.time()  # Reset timer
+                frameCount = 0  # Reset frame count
                 print("Switched to VIEW mode")
     
     # Cleanup
