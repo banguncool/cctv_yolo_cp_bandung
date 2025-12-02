@@ -89,7 +89,7 @@ encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
 crop = config.getboolean("main", "crop")
 cropArea = ast.literal_eval(config["main"]["cropArea"])
 maxAgeTracker = int(config["main"]["maxAgeTracker"])
-
+record = config.getboolean("main", "record")
 
 tracker = SortTracker(max_age=maxAgeTracker, min_hits=3, iou_threshold=0.3)
 
@@ -103,6 +103,31 @@ resolutionHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
 if crop:
   resolutionWidth = cropArea[1][0] - cropArea[0][0]
   resolutionHeight = cropArea[1][1] - cropArea[0][1]
+
+# Calculate cropFrame (FOV) dimensions for recording
+cropFrameWidth = fov[1][0] - fov[0][0]
+cropFrameHeight = fov[1][1] - fov[0][1]
+
+# Video recording variables
+videoWriter = None
+if record:
+  # Create video folder if it doesn't exist
+  if not os.path.exists('video'):
+    os.makedirs('video')
+  
+  # Generate filename with format "YYMMDD HHMM.mp4"
+  recordingFileName = datetime.now().strftime('%y%m%d %H%M') + '.mp4'
+  recordingFilePath = os.path.join('video', recordingFileName)
+  
+  # Get FPS from video capture
+  videoFps = cap.get(cv.CAP_PROP_FPS)
+  if videoFps == 0 or videoFps > 60:  # Handle invalid FPS
+    videoFps = 25.0
+  
+  # Initialize VideoWriter with cropFrame dimensions
+  fourcc = cv.VideoWriter_fourcc(*'mp4v')  # or 'H264' for h264
+  videoWriter = cv.VideoWriter(recordingFilePath, fourcc, videoFps, (cropFrameWidth, cropFrameHeight))
+  print(f'Recording started: {recordingFilePath} ({cropFrameWidth}x{cropFrameHeight} @ {videoFps} fps)')
 
 boundLineFov = [
   [fov[0][0] + boundLine[0], fov[0][1]],
@@ -263,6 +288,10 @@ while True:
   # ================================================================================================
   cropFrame = tl.crop(frame, fov[0], fov[1])
 
+  # Record frame to video file if recording is enabled
+  if record and videoWriter is not None:
+    videoWriter.write(cropFrame)
+
   # Use model.predict instead of model.track
   results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
 
@@ -282,6 +311,7 @@ while True:
   # Update tracker with detections (SortTracker expects detections and frame)
   if len(detections) > 0:
     tracks = tracker.update(np.array(detections), cropFrame)
+    lastActivityTime = time.time()
   else:
     tracks = np.array([])
   
@@ -335,7 +365,6 @@ while True:
           trackedObjects[track_id]["counted"] = True
           objectCount += 1
           sessionCount += 1
-          lastActivityTime = time.time()
       
       else:  # direction == "left"
         # Moving from right to left (second line > first line)
@@ -346,7 +375,6 @@ while True:
           trackedObjects[track_id]["counted"] = True
           objectCount += 1
           sessionCount += 1
-          lastActivityTime = time.time()
     
     # Update center position
     trackedObjects[track_id]["center_x"] = center_x
@@ -420,5 +448,9 @@ while True:
 # END
 # ==================================================================================================
 # Release resources
+if videoWriter is not None:
+  videoWriter.release()
+  print(f'Recording saved: {recordingFilePath}')
+
 cap.release()
 cv.destroyAllWindows()
