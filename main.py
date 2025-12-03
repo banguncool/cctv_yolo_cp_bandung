@@ -137,6 +137,7 @@ boundLineFov = [
 # Counting variables
 objectCount = 0
 trackedObjects = {}  # Store track_id: {"passed_first": bool, "passed_second": bool, "counted": bool, "center_x": int}
+trackConfidence = {}  # Store track_id: confidence
 
 # Time tracking variables
 startTime = time.time()
@@ -312,6 +313,35 @@ while True:
   if len(detections) > 0:
     tracks = tracker.update(np.array(detections), cropFrame)
     lastActivityTime = time.time()
+    
+    # Map track IDs to confidence scores
+    for track in tracks:
+      track_id = int(track[4])
+      # Find matching detection by IOU
+      best_iou = 0
+      best_conf = 0.0
+      track_box = track[:4]
+      for det in detections:
+        det_box = det[:4]
+        # Calculate IOU
+        x1 = max(track_box[0], det_box[0])
+        y1 = max(track_box[1], det_box[1])
+        x2 = min(track_box[2], det_box[2])
+        y2 = min(track_box[3], det_box[3])
+        
+        if x2 > x1 and y2 > y1:
+          intersection = (x2 - x1) * (y2 - y1)
+          track_area = (track_box[2] - track_box[0]) * (track_box[3] - track_box[1])
+          det_area = (det_box[2] - det_box[0]) * (det_box[3] - det_box[1])
+          union = track_area + det_area - intersection
+          iou = intersection / union if union > 0 else 0
+          
+          if iou > best_iou:
+            best_iou = iou
+            best_conf = det[4]
+      
+      if best_iou > 0:
+        trackConfidence[track_id] = best_conf
   else:
     tracks = np.array([])
   
@@ -383,10 +413,13 @@ while True:
     color = COLOR_PINK if trackedObjects[track_id]["counted"] else COLOR_GREEN
     cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), color, THICKNESS)
     
-    # Draw track ID and center point
-    cv.putText(cropFrame, f"ID:{track_id}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
+    # Draw confidence and track ID
+    conf_value = trackConfidence.get(track_id, 0.0)
+    # cv.putText(cropFrame, f"{conf_value:.2f} ID:{track_id}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
+    #            0.5, color, THICKNESS_THIN)
+    cv.putText(cropFrame, f"{conf_value:.2f}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
                0.5, color, THICKNESS_THIN)
-    cv.circle(cropFrame, (center_x, center_y), 3, COLOR_RED, -1)
+    cv.circle(cropFrame, (center_x, center_y), 5, COLOR_RED, -1)
 
   
   # Check for no activity timeout
@@ -404,8 +437,8 @@ while True:
   cv.rectangle(frame, fov[0], fov[1], COLOR_BLUE, THICKNESS)
 
   # draw boundary line 
-  cv.line(frame, (boundLineFov[0][0], boundLineFov[0][1]), (boundLineFov[0][0], boundLineFov[1][1]), COLOR_RED, THICKNESS_THIN)
-  cv.line(frame, (boundLineFov[1][0], boundLineFov[0][1]), (boundLineFov[1][0], boundLineFov[1][1]), COLOR_RED, THICKNESS_THIN)
+  cv.line(frame, (boundLineFov[0][0], boundLineFov[0][1]), (boundLineFov[0][0], boundLineFov[1][1]), COLOR_RED, THICKNESS)
+  cv.line(frame, (boundLineFov[1][0], boundLineFov[0][1]), (boundLineFov[1][0], boundLineFov[1][1]), COLOR_RED, THICKNESS)
 
   # Show frame
   cv.imshow(windowName, tl.resize(frame, viewScale))
