@@ -126,8 +126,8 @@ if record:
   
   # Initialize VideoWriter with cropFrame dimensions
   fourcc = cv.VideoWriter_fourcc(*'mp4v')  # or 'H264' for h264
-  videoWriter = cv.VideoWriter(recordingFilePath, fourcc, videoFps, (cropFrameWidth, cropFrameHeight))
-  print(f'Recording started: {recordingFilePath} ({cropFrameWidth}x{cropFrameHeight} @ {videoFps} fps)')
+  videoWriter = cv.VideoWriter(recordingFilePath, fourcc, videoFps, (resolutionWidth, resolutionHeight))
+  print(f'Recording started: {recordingFilePath} ({resolutionWidth}x{resolutionHeight} @ {videoFps} fps)')
 
 boundLineFov = [
   [fov[0][0] + boundLine[0], fov[0][1]],
@@ -289,10 +289,6 @@ while True:
   # ================================================================================================
   cropFrame = tl.crop(frame, fov[0], fov[1])
 
-  # Record frame to video file if recording is enabled
-  if record and videoWriter is not None:
-    videoWriter.write(cropFrame)
-
   # Use model.predict instead of model.track
   results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
 
@@ -439,12 +435,18 @@ while True:
   # draw boundary line 
   cv.line(frame, (boundLineFov[0][0], boundLineFov[0][1]), (boundLineFov[0][0], boundLineFov[1][1]), COLOR_RED, THICKNESS)
   cv.line(frame, (boundLineFov[1][0], boundLineFov[0][1]), (boundLineFov[1][0], boundLineFov[1][1]), COLOR_RED, THICKNESS)
-
-  # Show frame
-  cv.imshow(windowName, tl.resize(frame, viewScale))
+  
   # ================================================================================================
   # END OF PROCESSING
   # ================================================================================================
+
+  # Show frame
+  cv.imshow(windowName, tl.resize(frame, viewScale))
+
+  # Record frame to video file if recording is enabled
+  if record and videoWriter is not None:
+    videoWriter.write(frame)
+
 
   # FPS limiting with accurate timing
   if fpsSet > 0:
