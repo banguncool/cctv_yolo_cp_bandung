@@ -104,30 +104,33 @@ if crop:
   resolutionWidth = cropArea[1][0] - cropArea[0][0]
   resolutionHeight = cropArea[1][1] - cropArea[0][1]
 
-# Calculate cropFrame (FOV) dimensions for recording
-cropFrameWidth = fov[1][0] - fov[0][0]
-cropFrameHeight = fov[1][1] - fov[0][1]
-
 # Video recording variables
 videoWriter = None
+videoWriterCrop = None
 if record:
-  # Create video folder if it doesn't exist
-  if not os.path.exists('video'):
-    os.makedirs('video')
+  # Create record folder if it doesn't exist
+  if not os.path.exists('record'):
+    os.makedirs('record')
   
   # Generate filename with format "YYMMDD HHMM.mp4"
   recordingFileName = datetime.now().strftime('%y%m%d %H%M') + '.mp4'
-  recordingFilePath = os.path.join('video', recordingFileName)
+  recordingFileNameCrop = datetime.now().strftime('%y%m%d %H%M') + '_original.mp4'
+  recordingFilePath = os.path.join('record', recordingFileName)
+  recordingFilePathCrop = os.path.join('record', recordingFileNameCrop)
   
   # Get FPS from video capture
   videoFps = cap.get(cv.CAP_PROP_FPS)
   if videoFps == 0 or videoFps > 60:  # Handle invalid FPS
     videoFps = 25.0
   
-  # Initialize VideoWriter with cropFrame dimensions
+  # Initialize VideoWriter for main display
   fourcc = cv.VideoWriter_fourcc(*'mp4v')  # or 'H264' for h264
   videoWriter = cv.VideoWriter(recordingFilePath, fourcc, videoFps, (resolutionWidth, resolutionHeight))
   print(f'Recording started: {recordingFilePath} ({resolutionWidth}x{resolutionHeight} @ {videoFps} fps)')
+  
+  # Initialize VideoWriter for cropFrame area
+  videoWriterCrop = cv.VideoWriter(recordingFilePathCrop, fourcc, videoFps, (resolutionWidth, resolutionHeight))
+  print(f'Recording cropFrame: {recordingFilePathCrop} ({resolutionWidth}x{resolutionHeight} @ {videoFps} fps)')
 
 boundLineFov = [
   [fov[0][0] + boundLine[0], fov[0][1]],
@@ -288,6 +291,11 @@ while True:
   # PROCESSING
   # ================================================================================================
   cropFrame = tl.crop(frame, fov[0], fov[1])
+
+  # Record the cropFrame area if recording is enabled
+  if record and videoWriterCrop is not None:
+    videoWriterCrop.write(cropFrame)
+
 
   # Use model.predict instead of model.track
   results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
@@ -492,6 +500,10 @@ if sessionCount > 0:
 if videoWriter is not None:
   videoWriter.release()
   print(f'Recording saved: {recordingFilePath}')
+
+if videoWriterCrop is not None:
+  videoWriterCrop.release()
+  print(f'CropFrame recording saved: {recordingFilePathCrop}')
 
 cap.release()
 cv.destroyAllWindows()
