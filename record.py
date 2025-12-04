@@ -40,6 +40,7 @@ rtspUrl = "rtsp://admin:adybangun12@192.168.0.64:554"
 crop = config.getboolean("main", "crop")
 cropArea = ast.literal_eval(config["main"]["cropArea"]) if crop else None
 encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
+viewScale = config["ui"]["viewScale"]
 
 # Video output settings
 videoFolder = "video"
@@ -198,7 +199,7 @@ def main():
                    FONT_SIZE, COLOR_YELLOW, THICKNESS)
         
         # Show frame with time overlay
-        cv.imshow(windowName, displayFrame)
+        cv.imshow(windowName, tl.resize(displayFrame, viewScale))
         
         # Display stats every 100 frames
         if frameCount % 100 == 0:

@@ -44,6 +44,7 @@ COLOR_GREEN = (0, 255, 0)
 COLOR_YELLOW = (0, 255, 255)
 COLOR_PINK = (224, 25, 211)
 COLOR_BROWN = (156, 156, 156)
+COLOR_ORANGE = (0, 165, 255)
 
 
 # ==================================================================================================
@@ -89,10 +90,11 @@ encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
 crop = config.getboolean("main", "crop")
 cropArea = ast.literal_eval(config["main"]["cropArea"])
 maxAgeTracker = int(config["main"]["maxAgeTracker"])
+minHitTracker = int(config["main"]["minHitTracker"])
 record = config.getboolean("main", "record")
 
-tracker = SortTracker(max_age=maxAgeTracker, min_hits=3, iou_threshold=0.3)
 
+tracker = SortTracker(max_age=maxAgeTracker, min_hits=minHitTracker, iou_threshold=0.3)
 # Set video backend options to handle corrupted frames
 cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*encode))
 cap.set(cv.CAP_PROP_BUFFERSIZE, 3)
@@ -231,7 +233,8 @@ while True:
   # Read frame
   ret, frame = cap.read()
   if not ret:
-    break
+    # Skip corrupted frame caused by HEVC decoder errors
+    continue
 
   if crop:
     frame = tl.crop(frame, cropArea[0], cropArea[1])
@@ -244,6 +247,10 @@ while True:
   frameCount += 1
   if frameSkip > 0 and frameCount % (frameSkip + 1) != 0:
     continue
+
+  # Record the cropFrame area if recording is enabled
+  if record and videoWriterCrop is not None:
+    videoWriterCrop.write(frame)
   
   # Calculate actual FPS (measure displayed frames only)
   fpsEndTime = time.time()
@@ -286,16 +293,12 @@ while True:
       cv.putText(frame, f'M: {measureEvent}: ({ms[0][0]}, {ms[0][1]}) ({ms[1][0]}, {ms[1][1]})', 
           (resolutionWidth - 380, 70), cv.FONT_HERSHEY_SIMPLEX, FONT_SIZE, COLOR_YELLOW, THICKNESS)
       cv.rectangle(frame, measurePoint[0], measurePoint[1], COLOR_GREEN, THICKNESS)
-  
+
+
   # ================================================================================================
   # PROCESSING
   # ================================================================================================
   cropFrame = tl.crop(frame, fov[0], fov[1])
-
-  # Record the cropFrame area if recording is enabled
-  if record and videoWriterCrop is not None:
-    videoWriterCrop.write(cropFrame)
-
 
   # Use model.predict instead of model.track
   results = model.predict(cropFrame, conf=confidence, save=False, classes=0, verbose=False)
@@ -414,7 +417,7 @@ while True:
     trackedObjects[track_id]["center_x"] = center_x
     
     # Draw bounding box
-    color = COLOR_PINK if trackedObjects[track_id]["counted"] else COLOR_GREEN
+    color = COLOR_ORANGE if trackedObjects[track_id]["counted"] else COLOR_GREEN
     cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), color, THICKNESS)
     
     # Draw confidence and track ID
@@ -422,7 +425,7 @@ while True:
     # cv.putText(cropFrame, f"{conf_value:.2f} ID:{track_id}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
     #            0.5, color, THICKNESS_THIN)
     cv.putText(cropFrame, f"{conf_value:.2f}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
-               0.5, color, THICKNESS_THIN)
+               0.5, color, THICKNESS)
     cv.circle(cropFrame, (center_x, center_y), 5, COLOR_RED, -1)
 
   
