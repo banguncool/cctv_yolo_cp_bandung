@@ -435,7 +435,7 @@ while True:
   # draw boundary line 
   cv.line(frame, (boundLineFov[0][0], boundLineFov[0][1]), (boundLineFov[0][0], boundLineFov[1][1]), COLOR_RED, THICKNESS)
   cv.line(frame, (boundLineFov[1][0], boundLineFov[0][1]), (boundLineFov[1][0], boundLineFov[1][1]), COLOR_RED, THICKNESS)
-  
+
   # ================================================================================================
   # END OF PROCESSING
   # ================================================================================================
@@ -482,6 +482,12 @@ while True:
 # ==================================================================================================
 # END
 # ==================================================================================================
+# Save final session data before closing
+if sessionCount > 0:
+  endDateTime = datetime.now()
+  updateCsvFile(sessionStartTime, endDateTime, sessionCount)
+  print(f'Final session data saved: {sessionCount} objects counted')
+
 # Release resources
 if videoWriter is not None:
   videoWriter.release()
