@@ -63,6 +63,10 @@ resolutionHeight = 0
 model = YOLO(config["model"]["weights"])
 cap = cv.VideoCapture(config["main"]["vidInput"])
 
+# Check if input is a video file or camera/stream
+vidInput = config["main"]["vidInput"]
+isVideoFile = not (vidInput.startswith('rtsp://') or vidInput.startswith('http://') or vidInput.isdigit())
+
 # Mouse callback variables
 textMousePosition = '(0, 0)'
 measurePoint = [[0, 0], [0, 0]]
@@ -233,8 +237,13 @@ while True:
   # Read frame
   ret, frame = cap.read()
   if not ret:
-    # Skip corrupted frame caused by HEVC decoder errors
-    continue
+    if isVideoFile:
+      # End of video file
+      print("End of video file. Exiting...")
+      break
+    else:
+      # Camera/stream error - skip corrupted frame and continue
+      continue
 
   if crop:
     frame = tl.crop(frame, cropArea[0], cropArea[1])
