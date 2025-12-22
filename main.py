@@ -417,7 +417,7 @@ while True:
     trackedObjects[track_id]["center_x"] = center_x
     
     # Draw bounding box
-    color = COLOR_ORANGE if trackedObjects[track_id]["counted"] else COLOR_GREEN
+    color = COLOR_PINK if trackedObjects[track_id]["counted"] else COLOR_GREEN
     cv.rectangle(cropFrame, (x_min, y_min), (x_max, y_max), color, THICKNESS)
     
     # Draw confidence and track ID

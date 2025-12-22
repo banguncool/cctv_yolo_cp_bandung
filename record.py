@@ -40,7 +40,7 @@ rtspUrl = "rtsp://admin:adybangun12@192.168.0.64:554"
 crop = config.getboolean("main", "crop")
 cropArea = ast.literal_eval(config["main"]["cropArea"]) if crop else None
 encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
-viewScale = config["ui"]["viewScale"]
+viewScale = float(config["ui"]["viewScale"])  # as a double value
 
 # Video output settings
 videoFolder = "video"
