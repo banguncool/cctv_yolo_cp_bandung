@@ -81,6 +81,7 @@ fpsUpdateTime = time.time()
 
 fpsSet = int(config["ui"]["fpsSet"])
 frameSkip = int(config["ui"]["frameSkip"])
+jumpSeconds = int(config["ui"]["jumpSeconds"])
 viewScale = float(config["ui"]["viewScale"])
 windowName = config["ui"]["windowName"]
 drawRectangle = config.getboolean("main", "drawRectangle")
@@ -95,10 +96,11 @@ crop = config.getboolean("main", "crop")
 cropArea = ast.literal_eval(config["main"]["cropArea"])
 maxAgeTracker = int(config["main"]["maxAgeTracker"])
 minHitTracker = int(config["main"]["minHitTracker"])
+thresholdTracker = float(config["main"]["thresholdTracker"])
 record = config.getboolean("main", "record")
 
 
-tracker = SortTracker(max_age=maxAgeTracker, min_hits=minHitTracker, iou_threshold=0.3)
+tracker = SortTracker(max_age=maxAgeTracker, min_hits=minHitTracker, iou_threshold=thresholdTracker)
 # Set video backend options to handle corrupted frames
 cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*encode))
 cap.set(cv.CAP_PROP_BUFFERSIZE, 3)
@@ -109,6 +111,12 @@ resolutionHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
 if crop:
   resolutionWidth = cropArea[1][0] - cropArea[0][0]
   resolutionHeight = cropArea[1][1] - cropArea[0][1]
+
+# Jump to specified time in video (only for video files)
+if isVideoFile and jumpSeconds > 0:
+  jumpMilliseconds = jumpSeconds * 1000
+  cap.set(cv.CAP_PROP_POS_MSEC, jumpMilliseconds)
+  print(f'Jumped to {jumpSeconds} seconds in video')
 
 # Video recording variables
 videoWriter = None
@@ -282,8 +290,15 @@ while True:
   cv.putText(frame, f"Count: {objectCount}", (10, 70), cv.FONT_HERSHEY_SIMPLEX, 
     FONT_SIZE, COLOR_GREEN, THICKNESS_BOLD)
   
-  # Display running time
-  runningTime = int(time.time() - startTime)
+  # Display video time (for video files) or running time (for streams)
+  if isVideoFile:
+    # Get actual video position in milliseconds
+    videoTimeMs = cap.get(cv.CAP_PROP_POS_MSEC)
+    runningTime = int(videoTimeMs / 1000)
+  else:
+    # For streams, use elapsed time
+    runningTime = int(time.time() - startTime)
+  
   hours = runningTime // 3600
   minutes = (runningTime % 3600) // 60
   seconds = runningTime % 60
@@ -431,8 +446,8 @@ while True:
     
     # Draw confidence and track ID
     conf_value = trackConfidence.get(track_id, 0.0)
-    # cv.putText(cropFrame, f"{conf_value:.2f} ID:{track_id}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
-    #            0.5, color, THICKNESS_THIN)
+    cv.putText(cropFrame, f"ID:{track_id}", (x_min, y_min - 25), cv.FONT_HERSHEY_SIMPLEX, 
+               0.5, color, THICKNESS)
     cv.putText(cropFrame, f"{conf_value:.2f}", (x_min, y_min - 10), cv.FONT_HERSHEY_SIMPLEX, 
                0.5, color, THICKNESS)
     cv.circle(cropFrame, (center_x, center_y), 5, COLOR_RED, -1)
