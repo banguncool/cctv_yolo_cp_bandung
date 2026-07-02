@@ -132,19 +132,20 @@ if record:
   recordingFilePath = os.path.join('record', recordingFileName)
   recordingFilePathCrop = os.path.join('record', recordingFileNameCrop)
   
-  # Get FPS from video capture
-  videoFps = cap.get(cv.CAP_PROP_FPS)
-  if videoFps == 0 or videoFps > 60:  # Handle invalid FPS
-    videoFps = 25.0
+  # Calculate effective FPS for recording (considering fpsSet and frameSkip)
+  if frameSkip > 0:
+    recordingFps = fpsSet / (frameSkip + 1)
+  else:
+    recordingFps = fpsSet
   
   # Initialize VideoWriter for main display
   fourcc = cv.VideoWriter_fourcc(*'mp4v')  # or 'H264' for h264
-  videoWriter = cv.VideoWriter(recordingFilePath, fourcc, videoFps, (resolutionWidth, resolutionHeight))
-  print(f'Recording started: {recordingFilePath} ({resolutionWidth}x{resolutionHeight} @ {videoFps} fps)')
+  videoWriter = cv.VideoWriter(recordingFilePath, fourcc, recordingFps, (resolutionWidth, resolutionHeight))
+  print(f'Recording started: {recordingFilePath} ({resolutionWidth}x{resolutionHeight} @ {recordingFps} fps)')
   
   # Initialize VideoWriter for cropFrame area
-  videoWriterCrop = cv.VideoWriter(recordingFilePathCrop, fourcc, videoFps, (resolutionWidth, resolutionHeight))
-  print(f'Recording cropFrame: {recordingFilePathCrop} ({resolutionWidth}x{resolutionHeight} @ {videoFps} fps)')
+  videoWriterCrop = cv.VideoWriter(recordingFilePathCrop, fourcc, recordingFps, (resolutionWidth, resolutionHeight))
+  print(f'Recording cropFrame: {recordingFilePathCrop} ({resolutionWidth}x{resolutionHeight} @ {recordingFps} fps)')
 
 boundLineFov = [
   [fov[0][0] + boundLine[0], fov[0][1]],
