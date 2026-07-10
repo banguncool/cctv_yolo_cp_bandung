@@ -89,6 +89,7 @@ fov = ast.literal_eval(config["ui"]["fov"])
 boundLine = ast.literal_eval(config["ui"]["boundLine"])
 windowCropName = config["ui"]["windowCropName"]
 confidence = float(config["model"]["confidence"])
+modelType = config["model"]["modelType"].lower()  # detection / obb / segmentation
 direction = config["main"]["direction"].lower()  # left or right
 saveNoActivity = int(config["main"]["saveNoActivity"])  # seconds before saving to CSV
 encode = config["main"]["encode"].lower()  # h264 / h265 / mjpeg
@@ -330,7 +331,16 @@ while True:
 
   # Prepare detections for sort-track
   detections = []
-  for box in results[0].boxes:
+  
+  # Handle different model types
+  if modelType == "obb":
+    boxes_data = results[0].obb
+  elif modelType == "segmentation":
+    boxes_data = results[0].boxes
+  else:  # detection
+    boxes_data = results[0].boxes
+  
+  for box in boxes_data:
     x_min, y_min, x_max, y_max = box.xyxy[0]
     conf = box.conf[0]
     cls = int(box.cls[0])
